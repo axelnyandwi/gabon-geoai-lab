@@ -1,0 +1,107 @@
+# Variables locales et secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+.streamlit/secrets.*.toml
+secrets/
+*.pem
+*.key
+
+# Environnements virtuels Python
+.venv/
+.venv-*/
+venv/
+venv-*/
+env/
+ENV/
+
+# Caches Python, outils et fichiers de construction
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+build/
+dist/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# Caches Jupyter et IPython
+.ipynb_checkpoints/
+.ipython/
+
+# Configuration locale VS Code et fichiers temporaires
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+*.bak
+
+# Données réelles : seuls les fichiers .gitkeep sont conservés
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+
+# Modèles entraînés et tableaux sérialisés
+*.pkl
+*.pickle
+*.joblib
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+*.keras
+*.h5
+*.hdf5
+*.bin
+*.npy
+*.npz
+
+# Artefacts ML et résultats locaux, quel que soit leur format
+/artifacts/
+/outputs/
+/checkpoints/
+/model_weights/
+/runs/
+/mlruns/
+/wandb/
+
+# Formats de données volumineuses et archives
+*.tif
+*.tiff
+*.geotiff
+*.vrt
+*.ovr
+*.aux.xml
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.gpkg
+*.gdb/
+*.geojson
+*.nc
+*.hdf
+*.parquet
+*.feather
+*.las
+*.laz
+*.zarr/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Journaux et fichiers système
+*.log
+.DS_Store
+Thumbs.db
