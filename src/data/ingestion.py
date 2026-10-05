@@ -51,3 +51,56 @@ def download_asset(
     )
 
     return local_path
+
+import requests
+
+
+def search_sentinel2(
+    bbox: list[float],
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float | None = None,
+) -> list[dict]:
+    """Search Sentinel-2 L2A products from the CDSE STAC API."""
+
+    url = "https://stac.dataspace.copernicus.eu/v1/search"
+
+    payload = {
+        "collections": ["sentinel-2-l2a"],
+        "bbox": bbox,
+        "datetime": f"{start_date}T00:00:00Z/{end_date}T23:59:59Z",
+        "limit": 100,
+    }
+
+    if max_cloud_cover is not None:
+        payload["query"] = {
+            "eo:cloud_cover": {
+                "lte": max_cloud_cover
+            }
+        }
+        
+    response = requests.post(
+        url,
+        json=payload,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    return data.get("features", [])
+
+def select_best_product(items: list[dict]) -> dict:
+    """Select the Sentinel-2 product with the lowest cloud cover."""
+
+    if not items:
+        raise ValueError("Aucun produit Sentinel-2 disponible.")
+
+    return min(
+        items,
+        key=lambda item: item.get("properties", {}).get(
+            "eo:cloud_cover",
+            float("inf"),
+        ),
+    )
