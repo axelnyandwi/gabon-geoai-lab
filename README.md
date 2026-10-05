@@ -20,16 +20,16 @@ Les étapes futures pourront couvrir :
 
 ## Installation et démarrage
 
-Python **3.12** est la version de référence. Exécuter les commandes depuis la racine du dépôt.
+Python **3.10.11** est la version de référence. Exécuter les commandes depuis la racine du dépôt.
 
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+```powershell
+py -3.10 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Sous Windows, créer l’environnement avec `py -3.12 -m venv .venv`, puis l’activer dans PowerShell avec `.venv\Scripts\Activate.ps1`.
+Sous Windows, créer l’environnement avec `py -3.10 -m venv .venv`, puis l’activer dans PowerShell avec `.venv\Scripts\Activate.ps1`.
 
 L’application est accessible à l’adresse locale affichée par Streamlit, généralement `http://localhost:8501`.
 
