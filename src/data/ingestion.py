@@ -1,6 +1,32 @@
 """Acquisition et mise à jour des données géospatiales à développer."""
+import os
+
+import boto3
+import requests
+from dotenv import load_dotenv
 from pathlib import Path
 
+
+def create_cdse_s3_client():
+    """Create an authenticated S3 client for Copernicus Data Space."""
+
+    load_dotenv()
+
+    access_key = os.getenv("CDSE_S3_ACCESS_KEY")
+    secret_key = os.getenv("CDSE_S3_SECRET_KEY")
+
+    if not access_key or not secret_key:
+        raise ValueError(
+            "Variables CDSE_S3_ACCESS_KEY et CDSE_S3_SECRET_KEY manquantes."
+        )
+
+    return boto3.client(
+        "s3",
+        endpoint_url="https://eodata.dataspace.copernicus.eu",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="default",
+    )
 
 def get_asset(item: dict, asset_name: str) -> dict:
     """Return an asset from a STAC item."""
@@ -52,8 +78,6 @@ def download_asset(
 
     return local_path
 
-import requests
-
 
 def search_sentinel2(
     bbox: list[float],
@@ -80,9 +104,9 @@ def search_sentinel2(
         }
         
     response = requests.post(
-        url,
-        json=payload,
-        timeout=30,
+    url,
+    json=payload,
+    timeout=30,
     )
 
     response.raise_for_status()
@@ -104,3 +128,55 @@ def select_best_product(items: list[dict]) -> dict:
             float("inf"),
         ),
     )
+
+def ingest_sentinel2_product(
+    s3_client,
+    bbox: list[float],
+    start_date: str,
+    end_date: str,
+    destination_dir: Path,
+    max_cloud_cover: float | None = None,
+    asset_names: list[str] | None = None,
+) -> dict:
+    """Search, select and download a Sentinel-2 product."""
+
+    if asset_names is None:
+        asset_names = [
+            "B02_10m",
+            "B03_10m",
+            "B04_10m",
+            "B08_10m",
+            "SCL_20m",
+        ]
+
+    items = search_sentinel2(
+        bbox=bbox,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_cover=max_cloud_cover,
+    )
+
+    product = select_best_product(items)
+
+    product_id = product["id"]
+    product_dir = destination_dir / product_id
+
+    downloaded_assets = {}
+
+    for asset_name in asset_names:
+        asset = get_asset(product, asset_name)
+
+        local_path = download_asset(
+            s3_client=s3_client,
+            asset=asset,
+            destination_dir=product_dir,
+        )
+
+        downloaded_assets[asset_name] = local_path
+
+    return {
+        "product": product,
+        "product_id": product_id,
+        "directory": product_dir,
+        "assets": downloaded_assets,
+    }
