@@ -1,2 +1,4 @@
 streamlit>=1.40,<2.0
 truststore
+rasterio
+matplotlib

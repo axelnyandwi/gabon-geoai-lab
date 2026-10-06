@@ -21,7 +21,11 @@ def main():
         end_date="2025-01-31",
         destination_dir=OUTPUT_DIR,
         max_cloud_cover=50,
-        asset_names=["B04_10m"],
+        asset_names=[
+            "B02_10m",
+            "B03_10m",
+            "B04_10m",
+        ],
     )
 
     print("\nIngestion terminée")
