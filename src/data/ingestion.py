@@ -1,6 +1,8 @@
 """Acquisition et mise à jour des données géospatiales à développer."""
 import os
+import time
 
+from botocore.exceptions import ClientError
 import boto3
 import requests
 from dotenv import load_dotenv
@@ -57,26 +59,100 @@ def download_asset(
     s3_client,
     asset: dict,
     destination_dir: Path,
-    bucket_name: str = "eodata",
+    max_retries: int = 5,
+    retry_delay: int = 5,
 ) -> Path:
-    """Download an S3 asset locally if it is not already cached."""
+    """Download an S3 asset with local cache and retry handling."""
 
-    s3_key = get_s3_key(asset, bucket_name)
+    s3_uri = asset["href"]
 
-    destination_dir.mkdir(parents=True, exist_ok=True)
+    if not s3_uri.startswith("s3://"):
+        raise ValueError(
+            f"Adresse S3 invalide : {s3_uri}"
+        )
 
-    local_path = destination_dir / Path(s3_key).name
+    # Exemple :
+    # s3://eodata/Sentinel-2/.../B04_10m.jp2
+    s3_path = s3_uri.removeprefix("s3://")
 
-    if local_path.exists():
-        return local_path
+    bucket_name, object_key = s3_path.split("/", 1)
 
-    s3_client.download_file(
-        bucket_name,
-        s3_key,
-        str(local_path),
+    filename = Path(object_key).name
+
+    destination_dir.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
-    return local_path
+    destination_path = (
+        destination_dir
+        / filename
+    )
+
+    # Cache local
+    if (
+        destination_path.exists()
+        and destination_path.stat().st_size > 0
+    ):
+        print(
+            f"Déjà présent : {filename}"
+        )
+        return destination_path
+
+    # Téléchargement avec retries
+    for attempt in range(
+        1,
+        max_retries + 1,
+    ):
+        try:
+            print(
+                f"Téléchargement : {filename} "
+                f"(tentative {attempt}/{max_retries})"
+            )
+
+            s3_client.download_file(
+                bucket_name,
+                object_key,
+                str(destination_path),
+            )
+
+            return destination_path
+
+        except ClientError as error:
+
+            response = error.response
+
+            status_code = (
+                response
+                .get("ResponseMetadata", {})
+                .get("HTTPStatusCode")
+            )
+
+            # Erreurs serveur temporaires
+            if (
+                status_code
+                and status_code >= 500
+                and attempt < max_retries
+            ):
+                wait_seconds = (
+                    retry_delay * attempt
+                )
+
+                print(
+                    f"Erreur serveur {status_code}. "
+                    f"Nouvelle tentative dans "
+                    f"{wait_seconds} s..."
+                )
+
+                time.sleep(wait_seconds)
+
+                continue
+
+            raise
+
+    raise RuntimeError(
+        f"Impossible de télécharger : {s3_uri}"
+    )
 
 
 def search_sentinel2(

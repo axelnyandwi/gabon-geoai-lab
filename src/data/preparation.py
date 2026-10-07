@@ -99,6 +99,74 @@ def clip_raster(
         bbox=raster_bbox,
     )
 
+def clip_raster_to_aoi(
+    input_path: Path,
+    output_path: Path,
+    aoi_path: Path,
+) -> Path:
+    """Clip a raster using an AOI GeoJSON."""
+
+    import geopandas as gpd
+    from rasterio.mask import mask
+
+    # 1. Lecture de l'AOI
+    aoi = gpd.read_file(aoi_path)
+
+    if aoi.empty:
+        raise ValueError(f"AOI vide : {aoi_path}")
+
+    if aoi.crs is None:
+        raise ValueError(
+            f"L'AOI ne possède pas de CRS : {aoi_path}"
+        )
+
+    # 2. Ouverture du raster
+    with rasterio.open(input_path) as src:
+
+        if src.crs is None:
+            raise ValueError(
+                f"Le raster ne possède pas de CRS : {input_path}"
+            )
+
+        # 3. Reprojection automatique de l'AOI
+        aoi_raster_crs = aoi.to_crs(src.crs)
+
+        geometries = list(aoi_raster_crs.geometry)
+
+        # 4. Découpage
+        clipped_data, clipped_transform = mask(
+            src,
+            geometries,
+            crop=True,
+        )
+
+        # 5. Copie des métadonnées du raster
+        profile = src.profile.copy()
+
+        profile.update(
+            {
+                "height": clipped_data.shape[1],
+                "width": clipped_data.shape[2],
+                "transform": clipped_transform,
+            }
+        )
+
+    # 6. Création du dossier de sortie
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # 7. Écriture du raster découpé
+    with rasterio.open(
+        output_path,
+        "w",
+        **profile,
+    ) as dst:
+        dst.write(clipped_data)
+
+    return output_path
+
 def clip_rgb_bands(
     product_dir: Path,
     output_dir: Path,
@@ -183,3 +251,133 @@ def create_rgb_array(
     blue = normalize_band(blue)
 
     return np.dstack((red, green, blue))
+
+def calculate_ndvi(
+    red_path: Path,
+    nir_path: Path,
+    output_path: Path,
+) -> Path:
+    """Calculate NDVI from Sentinel-2 B04 and B08 bands."""
+
+    import numpy as np
+
+    with rasterio.open(red_path) as red_src:
+        red = red_src.read(1).astype("float32")
+        profile = red_src.profile.copy()
+
+    with rasterio.open(nir_path) as nir_src:
+        nir = nir_src.read(1).astype("float32")
+
+    if red.shape != nir.shape:
+        raise ValueError(
+            f"B04 et B08 n'ont pas les mêmes dimensions : "
+            f"{red.shape} != {nir.shape}"
+        )
+
+    denominator = nir + red
+
+    ndvi = np.divide(
+        nir - red,
+        denominator,
+        out=np.full_like(red, np.nan),
+        where=denominator != 0,
+    )
+
+    profile.update(
+        driver="GTiff",
+        dtype="float32",
+        count=1,
+        nodata=np.nan,
+        compress="deflate",
+    )
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with rasterio.open(
+        output_path,
+        "w",
+        **profile,
+    ) as dst:
+        dst.write(ndvi, 1)
+
+    return output_path
+
+def mask_ndvi_with_scl(
+    ndvi_path: Path,
+    scl_path: Path,
+    output_path: Path,
+) -> Path:
+    """Mask NDVI using Sentinel-2 Scene Classification Layer."""
+
+    import numpy as np
+    from rasterio.warp import reproject, Resampling
+
+    with rasterio.open(ndvi_path) as ndvi_src:
+        ndvi = ndvi_src.read(1).astype("float32")
+        profile = ndvi_src.profile.copy()
+
+        ndvi_crs = ndvi_src.crs
+        ndvi_transform = ndvi_src.transform
+        ndvi_shape = ndvi.shape
+
+    with rasterio.open(scl_path) as scl_src:
+
+        # Tableau qui recevra SCL sur la grille 10 m du NDVI
+        scl_aligned = np.zeros(
+            ndvi_shape,
+            dtype="uint8",
+        )
+
+        reproject(
+            source=rasterio.band(scl_src, 1),
+            destination=scl_aligned,
+            src_transform=scl_src.transform,
+            src_crs=scl_src.crs,
+            dst_transform=ndvi_transform,
+            dst_crs=ndvi_crs,
+            resampling=Resampling.nearest,
+        )
+
+    # Classes SCL à exclure
+    invalid_classes = [
+        0,   # No data
+        1,   # Saturated / defective
+        3,   # Cloud shadows
+        6,   # Water
+        8,   # Clouds medium probability
+        9,   # Clouds high probability
+        10,  # Thin cirrus
+        11,  # Snow / ice
+    ]
+
+    invalid_mask = np.isin(
+        scl_aligned,
+        invalid_classes,
+    )
+
+    ndvi_clean = ndvi.copy()
+    ndvi_clean[invalid_mask] = np.nan
+
+    profile.update(
+        driver="GTiff",
+        dtype="float32",
+        nodata=np.nan,
+        compress="deflate",
+    )
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with rasterio.open(
+        output_path,
+        "w",
+        **profile,
+    ) as dst:
+        dst.write(ndvi_clean, 1)
+
+    return output_path
