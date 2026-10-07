@@ -105,3 +105,6 @@ htmlcov/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local cache
+cache/
